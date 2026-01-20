@@ -1,4 +1,4 @@
-       require('dotenv').config();
+require('dotenv').config();
 
 let express = require("express");
 const app = express();
@@ -20,7 +20,16 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const passportLocalMongoose = require("passport-local-mongoose");
 
+// Check environment variables
+if (!process.env.ATLASDB_URL) {
+  console.error("❌ ATLASDB_URL is not defined in environment variables");
+}
 
+if (!process.env.SECRET) {
+  console.error("❌ SECRET is not defined in environment variables");
+}
+
+// Middleware setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({extended : true}));
@@ -28,85 +37,82 @@ app.use(methodOverride("_method"));
 app.engine("ejs", ejsMate);
 app.use(express.static(path.join(__dirname, "/public")));
 
- const dbURL = process.env.ATLASDB_URL;
-
-main().then(()=>{
-    console.log("connection successful");
-}).catch(err => console.log(err));
+const dbURL = process.env.ATLASDB_URL;
 
 async function main() {
-  await mongoose.connect(dbURL);
+  try {
+    await mongoose.connect(dbURL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("✅ MongoDB connection successful");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err.message);
+  }
 }
 
+main();
+
+// Session store
 const store = MongoStore.create({
   mongoUrl: dbURL,
   crypto: { secret: process.env.SECRET },
   touchAfter: 24 * 3600,
 });
 
-
-store.on("Error", ()=>{
-  console.log("Error in Mongo Session Store", Error);
+store.on("error", (error) => {
+  console.log("❌ Error in Mongo Session Store:", error);
 });
 
 const sessionOptions = {
   store,
-  secret : process.env.SECRET ,
+  secret: process.env.SECRET,
   resave: false,
-  saveUninitialized : true,
-  cookie : {
-    expires : Date.now() + 7 * 24 * 60 * 60 *1000,
-   maxAge:  7 * 24 * 60 * 60 *1000
+  saveUninitialized: true,
+  cookie: {
+    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true
   }
 };
 
-
-
 app.use(session(sessionOptions));
 app.use(flash());
-
 app.use(passport.initialize());
 app.use(passport.session());
 passport.use(new LocalStrategy(User.authenticate()));
-
 passport.serializeUser(User.serializeUser());
 passport.deserializeUser(User.deserializeUser());
 
-app.use((req, res, next)=>{
+app.use((req, res, next) => {
   res.locals.success = req.flash("success");
   res.locals.error = req.flash("error");
   res.locals.currUser = req.user;
   next();
 });
 
-// app.get("/demoUser", async (req, res)=>{
-//   let fakeUser = new User({
-//     email : "Student@gmail.com",
-//     username : "Balram",
-//   });
-      
-//   let newUser =await User.register(fakeUser, "ABCD");
-//    res.send(newUser);
-  
-// });
+app.get("/", (req, res) => {
+  res.redirect("/listing");
+});
 
+// Routes
 app.use("/listing", listingRouter);
 app.use("/listing/:id/reviews", reviewRouter);
 app.use("/", userRouter);
 
-
-app.all("*", (req, res, next)=>{
+// 404 handler
+app.all("*", (req, res, next) => {
   next(new ExpressError(404, "Page Not Found"));
-})
+});
 
+// Error handler
 app.use((err, req, res, next) => {
   let { code = 500, message = "Something Went Wrong" } = err;
-res.status(code).json({
-  error: message
-});
+  res.status(code).render("error", { message });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log("App is listening on port", PORT);
+  console.log(`✅ App is listening on port ${PORT}`);
+  console.log(`🌐 Server URL: http://localhost:${PORT}`);
 });
