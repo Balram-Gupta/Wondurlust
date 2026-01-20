@@ -1,4 +1,4 @@
-give me complete app.js according to this                                     require('dotenv').config();
+       require('dotenv').config();
 
 let express = require("express");
 const app = express();
