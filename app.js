@@ -102,7 +102,9 @@ app.all("*", (req, res, next)=>{
 
 app.use((err, req, res, next) => {
   let { code = 500, message = "Something Went Wrong" } = err;
-  res.status(code).render("error.ejs", { err }); 
+res.status(code).json({
+  error: message
+});
 });
 
 const PORT = process.env.PORT || 8080;
